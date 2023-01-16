@@ -2,7 +2,7 @@ from torch import nn
 from transformers import BertModel, RobertaForSequenceClassification
 from torch.optim import Adam
 from tqdm import tqdm
-from sklearn.metrics import f1_score, confusion_matrix
+from sklearn.metrics import f1_score, confusion_matrix, classification_report
 
 
 class BertClassifier(nn.Module):
@@ -135,3 +135,39 @@ def evaluate(model, tokenizer, test_data):
 
     print(f'Test Accuracy: {total_acc_test / len(test_data): .3f}')
 
+
+def evaluate_semeval(model, tokenizer, test_data):
+    test = TweetDataset(test_data, tokenizer)
+
+    test_dataloader = torch.utils.data.DataLoader(test, batch_size=2)
+
+    use_cuda = torch.cuda.is_available()
+    device = torch.device("cuda" if use_cuda else "cpu")
+
+    if use_cuda:
+        model = model.cuda()
+
+    y_pred = []
+    y_true = []
+
+    total_acc_test = 0
+
+    with torch.no_grad():
+        for test_input, test_label in test_dataloader:
+            test_label = test_label.to(device)
+            mask = test_input['attention_mask'].to(device)
+            input_id = test_input['input_ids'].squeeze(1).to(device)
+
+            output = model(input_id, mask)
+
+            acc = (output.argmax(dim=1) == test_label).sum().item()
+            
+            total_acc_test += acc
+            y_pred.extend(output.argmax(dim=1).cpu().detach().numpy())
+            y_true.extend(test_label.cpu().detach().numpy())
+    
+    print('Classification Report:')
+    print(classification_report(y_true, y_pred, labels=[0, 1, 2], digits=4))
+  
+    
+    print(f'Test Accuracy: {total_acc_test / len(test_data): .3f}')

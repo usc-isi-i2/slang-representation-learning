@@ -2,13 +2,23 @@ import html
 import nltk
 import re
 import string
+import random
 import torch
+import os
+import numpy as np
 import pandas as pd
 
 import requests
 from bs4 import BeautifulSoup
 from tqdm import tqdm
 import json
+
+emoji_pattern = re.compile("["
+                           u"\U0001F600-\U0001F64F"  # emoticons
+                           u"\U0001F300-\U0001F5FF"  # symbols & pictographs
+                           u"\U0001F680-\U0001F6FF"  # transport & map symbols
+                           u"\U0001F1E0-\U0001F1FF"  # flags (iOS)
+                           "]+", flags=re.UNICODE)
 
 
 def clean_text(text: str) -> str:
@@ -54,6 +64,20 @@ def read_ud(ud_path, fname):
 
     return fname
 
+def read_osd(osd_fname = "data/osd.json", write_to_file=False, dfname="./data/osd.dat"):
+    if not os.path.exists(osd_fname):
+        word_usage_dict = scrape_OSD()
+    else:
+        with open(osd_fname, "r") as f:
+            word_usage_dict = json.load(f)
+
+    if write_to_file:
+        examples = [x for ex in word_usage_dict.values() for x in ex]
+        df = pd.DataFrame(examples)
+        df.to_csv(df_name, index=False)
+
+    return word_usage_dict
+
 
 def scrape_OSD(osd_fname="data/osd.json"):
     word_list_page = "http://onlineslangdictionary.com/word-list/0-z/"
@@ -84,12 +108,13 @@ def scrape_OSD(osd_fname="data/osd.json"):
             if bq is not None and len(bq) > 0:
                 word_usage_dict[wrd] = [b.get_text().replace("[", "").replace("]", "") for b in bq]
 
-    with open(fname, "w") as f:
+    with open(osd_fname, "w") as f:
         json.dump(word_usage_dict, f)
 
     return word_usage_dict
 
-def remove_redundant_punct(text,redundant_punct_pattern):
+
+def remove_redundant_punct(text, redundant_punct_pattern):
     text_ = text
     result = re.search(redundant_punct_pattern, text)
     dif = 0
@@ -97,12 +122,13 @@ def remove_redundant_punct(text,redundant_punct_pattern):
         sub = result.group()
         sub = sorted(set(sub), key=sub.index)
         sub = ' ' + ''.join(list(sub)) + ' '
-        text = ''.join((text[:result.span()[0]+dif], sub, text[result.span()[1]+dif:]))
+        text = ''.join((text[:result.span()[0] + dif], sub, text[result.span()[1] + dif:]))
         text_ = ''.join((text_[:result.span()[0]], text_[result.span()[1]:])).strip()
         dif = abs(len(text) - len(text_))
         result = re.search(redundant_punct_pattern, text_)
     text = re.sub(r'\s+', ' ', text)
     return text.strip()
+
 
 def preprocess(text):
     regex_url_step1 = r'(?=http)[^\s]+'
@@ -112,9 +138,9 @@ def preprocess(text):
     regex_email = r'\S+@\S+'
     redundant_punct_pattern = r'([!\"#\$%\'\(\)\*\+,\.:;\-<=·>?@\[\\\]\^_ـ`{\|}~—٪’،؟`୍“؛”ۚ【»؛\s+«–…‘]{2,})'
 
-    text=str(text)
+    text = str(text)
     processing_tweet = re.sub('ـ', '', text)
-    processing_tweet= processing_tweet.lower()
+    processing_tweet = processing_tweet.lower()
     processing_tweet = re.sub('[«»]', ' " ', processing_tweet)
     processing_tweet = re.sub(regex_url_step1, '[link]', processing_tweet)
     processing_tweet = re.sub(regex_url_step2, '[link]', processing_tweet)
@@ -129,18 +155,19 @@ def preprocess(text):
     processing_tweet = re.sub("(.)\\1{2,}", "\\1", processing_tweet)
     ####processing_tweet=strip_emoji(processing_tweet)
 
-    search = ['_','\\','\n','-', ',','/' ,'.','\t','?','!','+','*','\'','|','#', '$','%']
-    replace = [' ', ' ',' ',' ', ' ',' ', ' ',' ',' ',' ',' ',' ',' ',' ', ' ', ' ',' ']
-    #remove numbers
+    search = ['_', '\\', '\n', '-', ',', '/', '.', '\t', '?', '!', '+', '*', '\'', '|', '#', '$', '%']
+    replace = [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ']
+    # remove numbers
     processing_tweet = re.sub(r'\d+', '', processing_tweet)
     processing_tweet = ' '.join(re.sub("[\n\.\,\"\!\?\:\;\-\=\؟]", " ", processing_tweet).split())
     processing_tweet = ' '.join(re.sub("[\_]", " ", processing_tweet).split())
-    processing_tweet = re.sub(r'[^\x00-\x7F]+',' ', processing_tweet)
+    processing_tweet = re.sub(r'[^\x00-\x7F]+', ' ', processing_tweet)
 
     for i in range(0, len(search)):
         processing_tweet = processing_tweet.replace(search[i], replace[i])
 
     return processing_tweet.strip()
+
 
 def get_freer_gpu():
     os.system('nvidia-smi -q -d Memory |grep -A4 GPU|grep Free >tmp')
