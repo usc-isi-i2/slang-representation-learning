@@ -14,6 +14,8 @@ def register_dataset(cls):
 
 
 def get_dataset(name, datapath):
+    if name not in REGISTRY:
+        raise ValueError("Dataset with the given name is not registered")
     return REGISTRY[name](datapath)
 
 
