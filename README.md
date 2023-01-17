@@ -41,3 +41,5 @@ To retrain the models:
 ```
 python retrain.py
 ```
+
+Please download the datasets from respective challenges. 
